@@ -165,6 +165,7 @@ typedef struct {
 
 	CURL *curl_handle;
 
+        solr_http_header_list_t *extra_request_headers;
 #ifdef ZTS
 	TSRMLS_D;
 #endif

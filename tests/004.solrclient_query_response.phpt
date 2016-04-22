@@ -30,6 +30,7 @@ $query->setStart(0);
 $query->setRows(50);
 
 $query->addField('cat')->addField('features')->addField('id')->addField('timestamp');
+$query->set('wj.extra_request_headers', "Referer:http://www.baidu.com");
 
 $query_response = $client->query($query);
 

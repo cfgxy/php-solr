@@ -209,6 +209,7 @@ PHP_SOLR_API int solr_init_handle(solr_curl_t *sch, solr_client_options_t *optio
 	solr_string_init(&(sch->response_header.buffer));
 	solr_string_init(&(sch->response_body.buffer));
 	solr_string_init(&(sch->debug_data_buffer));
+	sch->extra_request_headers = NULL;
 
 	solr_set_initial_curl_handle_options(&(sch), options TSRMLS_CC);
 
@@ -328,6 +329,15 @@ PHP_SOLR_API int solr_make_request(solr_client_t *client, solr_request_type_t re
 	header_list = curl_slist_append(header_list, "Accept-Charset: utf-8");
 	header_list = curl_slist_append(header_list, "Keep-Alive: 300");
 	header_list = curl_slist_append(header_list, "Connection: keep-alive");
+	
+	if (sch->extra_request_headers) {
+		solr_http_header_list_t *ptr = header_list;
+		while (ptr->next) {
+			ptr = ptr->next;
+		}
+		ptr->next = sch->extra_request_headers;
+		sch->extra_request_headers = NULL;
+	}
 
 	/* Disable the Expect: 100-continue header. Jetty gets confused with this header */
 	header_list = curl_slist_append(header_list, "Expect:");
@@ -353,32 +363,31 @@ PHP_SOLR_API int solr_make_request(solr_client_t *client, solr_request_type_t re
 	curl_easy_setopt(sch->curl_handle, CURLOPT_POSTFIELDS, NULL);
 	curl_easy_setopt(sch->curl_handle, CURLOPT_URL, NULL);
 	curl_easy_setopt(sch->curl_handle, CURLOPT_HTTPHEADER, NULL);
-
+	
 	switch(request_type)
 	{
 		case SOLR_REQUEST_SEARCH : /* HTTP FORM POST */
 		{
+
 			header_list = curl_slist_append(header_list, "Content-Type: application/x-www-form-urlencoded;charset=UTF-8");
-
-			curl_easy_setopt(sch->curl_handle, CURLOPT_POST,    1L);
-
+			solr_string_appendc(&(options->search_url), '&');
+			solr_string_append_solr_string(&(options->search_url), &(sch->request_body.buffer));
+			curl_easy_setopt(sch->curl_handle, CURLOPT_HTTPGET, 1L);
 			curl_easy_setopt(sch->curl_handle, CURLOPT_URL, options->search_url.str);
 			curl_easy_setopt(sch->curl_handle, CURLOPT_HTTPHEADER, header_list);
-			curl_easy_setopt(sch->curl_handle, CURLOPT_POSTFIELDSIZE, sch->request_body.buffer.len);
-			curl_easy_setopt(sch->curl_handle, CURLOPT_POSTFIELDS, sch->request_body.buffer.str);
+
 		}
 		break;
 
 		case SOLR_REQUEST_TERMS : /* HTTP FORM POST */
 		{
 			header_list = curl_slist_append(header_list, "Content-Type: application/x-www-form-urlencoded;charset=UTF-8");
-
-			curl_easy_setopt(sch->curl_handle, CURLOPT_POST,    1L);
-
+			solr_string_appendc(&(options->terms_url), '&');
+			solr_string_append_solr_string(&(options->terms_url), &(sch->request_body.buffer));
+			curl_easy_setopt(sch->curl_handle, CURLOPT_HTTPGET, 1L);
 			curl_easy_setopt(sch->curl_handle, CURLOPT_URL, options->terms_url.str);
 			curl_easy_setopt(sch->curl_handle, CURLOPT_HTTPHEADER, header_list);
-			curl_easy_setopt(sch->curl_handle, CURLOPT_POSTFIELDSIZE, sch->request_body.buffer.len);
-			curl_easy_setopt(sch->curl_handle, CURLOPT_POSTFIELDS, sch->request_body.buffer.str);
+
 		}
 		break;
 
@@ -479,6 +488,10 @@ PHP_SOLR_API void solr_free_handle(solr_curl_t *sch)
 	solr_string_free(&((sch)->response_header.buffer));
 	solr_string_free(&((sch)->response_body.buffer));
 	solr_string_free(&((sch)->debug_data_buffer));
+	if (sch->extra_request_headers != NULL) {
+		curl_slist_free_all(sch->extra_request_headers);
+		sch->extra_request_headers = NULL;
+	}
 
 	sch->handle_status = 0;
 

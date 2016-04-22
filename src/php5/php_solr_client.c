@@ -634,6 +634,35 @@ PHP_METHOD(SolrClient, query)
 	/* Remove wt if any */
 	zend_hash_del(solr_params->params, "wt", sizeof("wt")-1);
 
+#define WJ_EXTRA_REQUEST_HEADERS_KEY "wj.extra_request_headers"
+#define WJ_EXTRA_REQUEST_HEADERS_KEY_LEN (sizeof(WJ_EXTRA_REQUEST_HEADERS_KEY)-1)
+	if (zend_hash_exists(solr_params->params, WJ_EXTRA_REQUEST_HEADERS_KEY, WJ_EXTRA_REQUEST_HEADERS_KEY_LEN))
+	{
+		
+		solr_param_t **solr_param_ptr = NULL;
+		solr_string_t extra_headers;
+		zend_hash_find(solr_params->params, WJ_EXTRA_REQUEST_HEADERS_KEY, WJ_EXTRA_REQUEST_HEADERS_KEY_LEN, (void**)&solr_param_ptr);
+		
+		if (solr_param_ptr && (*solr_param_ptr)->count) {
+			extra_headers = (*solr_param_ptr)->head->contents.normal;
+		}
+		
+		if (client->handle.extra_request_headers) {
+			curl_slist_free_all(client->handle.extra_request_headers);
+			client->handle.extra_request_headers = NULL;
+		}
+
+		solr_char_t *line = NULL;
+		line = strtok(extra_headers.str, "\n");
+
+		while (line) {
+			client->handle.extra_request_headers = curl_slist_append(client->handle.extra_request_headers, line);
+			line = strtok(NULL, "\n");
+		}
+		
+		zend_hash_del(solr_params->params, WJ_EXTRA_REQUEST_HEADERS_KEY, WJ_EXTRA_REQUEST_HEADERS_KEY_LEN);
+	}
+	
 	if (solr_http_build_query(buffer, solr_params_obj, delimiter, delimiter_length TSRMLS_CC) == FAILURE)
 	{
 		solr_throw_exception_ex(solr_ce_SolrException, SOLR_ERROR_1003 TSRMLS_CC, SOLR_FILE_LINE_FUNC, "Error building HTTP query from parameters");
@@ -652,7 +681,7 @@ PHP_METHOD(SolrClient, query)
 		solr_request_type = SOLR_REQUEST_TERMS;
 		request_url =&(client->options.terms_url);
 	}
-
+	
 	/* Make the HTTP request to the Solr instance */
 	if (solr_make_request(client, solr_request_type TSRMLS_CC) == FAILURE)
 	{
